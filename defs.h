@@ -121,6 +121,17 @@ void            wakeup(void*);
 void            yield(void);
 int		getnice(int);
 int		setnice(int,int);
+int 			getpid(void);
+int				do_thread_create(int,void*(*)(void*),void*, void *);
+void			do_thread_exit(void*);
+int				do_thread_join(int, void**);
+int				do_gettid(void);
+
+// thread.c
+int 			thread_create(void *(*)(void *), int, void *, void *);
+void 			thread_exit(void *);
+int 			thread_join(int, void **);
+int 			gettid(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

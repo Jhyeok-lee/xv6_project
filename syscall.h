@@ -25,3 +25,7 @@
 #define SYS_getnice 24
 #define SYS_setnice 25
 #define SYS_freemem 23
+#define SYS_thread_create 23
+#define SYS_thread_exit 24
+#define SYS_thread_join 25
+#define SYS_gettid 26

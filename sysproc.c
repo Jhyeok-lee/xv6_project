@@ -57,7 +57,7 @@ int sys_setnice(void) {
 int
 sys_getpid(void)
 {
-  return proc->pid;
+	return getpid();
 }
 
 int
@@ -115,7 +115,34 @@ sys_halt(void)
 	return 0;
 }
 
-int sys_freemem(void)
-{
-	return freemem();
+int sys_thread_create(void){
+	int function, priority, arg, stack;
+
+	if(argint(0, &function)<0 || argint(1, &priority)<0 || argint(2, &arg)<0 || argint(3, &stack)<0)
+		return -1;
+
+	return thread_create((void *(*)(void *))function, priority, (void *)arg, (void *)stack);
+}
+
+int sys_thread_exit(void){
+	int retval;
+
+	if(argint(0, &retval)<0)
+		return -1;
+
+	thread_exit((void *)retval);
+	return 0;
+}
+
+int sys_thread_join(void){
+	int tid, retval;
+
+	if(argint(0, &tid)<0 || argint(1, &retval)<0)
+		return -1;
+
+	return thread_join(tid, (void **)retval);
+}
+
+int sys_gettid(void){
+	return gettid();
 }

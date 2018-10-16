@@ -7,9 +7,9 @@
 #include "proc.h"
 #include "spinlock.h"
 
-struct {
-  struct spinlock lock;
-  struct proc proc[NPROC];
+struct _ptable {
+	struct spinlock lock;
+	struct proc proc[NPROC];
 } ptable;
 
 //Queue for priority scheduling
@@ -75,6 +75,9 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+  p->nice = 20;
+  p->thread_num = 0;
+  p->thread_count = 0;
 
   return p;
 }
@@ -106,7 +109,10 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
-  p->nicevalue = 20;
+
+  p->thread_num = 0;
+  p->thread_count = 0;
+  p->nice = 20;
 }
 
 // Grow current process's memory by n bytes.
@@ -166,6 +172,10 @@ fork(void)
  
   pid = np->pid;
 
+  np->thread_num = 0;
+  np->thread_count = 0;
+  np->nice = 20;
+
   // lock to force the compiler to emit the np->state write last.
   acquire(&ptable.lock);
   np->state = RUNNABLE;
@@ -180,6 +190,7 @@ fork(void)
 void
 exit(void)
 {
+	int i;
   struct proc *p;
   int fd;
 
@@ -194,15 +205,59 @@ exit(void)
     }
   }
 
-  begin_op();
-  iput(proc->cwd);
-  end_op();
-  proc->cwd = 0;
+  if( proc->thread_num == 0 ) {
+  	begin_op();
+  	iput(proc->cwd);
+  	end_op();
+  	proc->cwd = 0;
+
+	if( proc->thread_count > 0 ) {
+		for( i=1; i <=proc->thread_count; i++) {
+			begin_op();
+			iput(proc->thread[i]->cwd);
+			end_op();
+			proc->thread[i]->cwd = 0;
+		}
+	}
+  }
+
+  if( proc->thread_num > 0 ) {
+	p = proc->parent;
+	begin_op();
+	iput(p->cwd);
+	end_op();
+	p->cwd = 0;
+
+	for( i=1 ; i <=p->thread_count ; i++) {
+		begin_op();
+		iput(p->thread[i]->cwd);
+		end_op();
+		p->thread[i]->cwd=0;
+	}
+  }
 
   acquire(&ptable.lock);
 
   // Parent might be sleeping in wait().
   wakeup1(proc->parent);
+
+  // if proc has threads -> threads exit
+  if( proc->thread_num == 0  && proc->thread_count > 0) {
+	for( i=1 ; i <= proc->thread_count ; i++ ) {
+		proc->thread[i]->state = ZOMBIE;
+	}
+  }
+
+  // if thread call exit
+  if( proc->thread_num > 0 ) {
+	p = proc->parent;
+	for( i=1 ; i <= p->thread_count ; i++ ) {
+		p->thread[i]->state = ZOMBIE;
+	}
+	p->state = ZOMBIE;
+	wakeup1(p->parent);
+	proc = p;
+  }
 
   // Pass abandoned children to init.
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
@@ -212,7 +267,6 @@ exit(void)
         wakeup1(initproc);
     }
   }
-
   // Jump into the scheduler, never to return.
   proc->state = ZOMBIE;
   sched();
@@ -237,15 +291,18 @@ wait(void)
       havekids = 1;
       if(p->state == ZOMBIE){
         // Found one.
-        pid = p->pid;
+        pid =proc->pid;
         kfree(p->kstack);
         p->kstack = 0;
-        freevm(p->pgdir);
+		if( p->thread_num == 0 )
+        	freevm(p->pgdir);
         p->state = UNUSED;
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
+		p->thread_count = 0;
+		p->thread_num = 0;
         release(&ptable.lock);
         return pid;
       }
@@ -306,26 +363,52 @@ void
 scheduler(void)
 {
   struct proc *p;
-  int i;
+  int a;
 
   for(;;){
     // Enable interrupts on this processor.
     sti();
-
-    scheTable();
+	a=40;
+	acquire(&ptable.lock);
+	for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+		if(p->state == RUNNING)
+			p->state = RUNNABLE;
+		if(p->state != RUNNABLE)
+			continue;
+		if( p->nice <= a )
+			a = p->nice;
+	}
+	release(&ptable.lock);
+	
+    // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for( i=0; i<queue.num; i++) {
-	p = queue.list[i];
-	proc = p;
-	switchuvm(p);
-	p->state = RUNNING;
-	swtch(&cpu->scheduler, proc->context);
-	switchkvm();
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+	  if(p->state == RUNNING)
+		p->state = RUNNABLE;
+      if(p->state != RUNNABLE)
+        continue;
+	  if(p->yield == 1) {
+		  p->yield = 0;
+		  continue;
+	  }
+	  if( p->nice != a )
+		continue;
+	  
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      swtch(&cpu->scheduler, proc->context);
+      switchkvm();
 
-	proc = 0;
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      proc = 0;
     }
     release(&ptable.lock);
-
+	
   }
 }
 
@@ -355,6 +438,7 @@ yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
   proc->state = RUNNABLE;
+  proc->yield = 1;
   sched();
   release(&ptable.lock);
 }
@@ -532,4 +616,138 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+int getpid(void){
+	return proc->pid - proc->thread_num;
+}
+
+int do_thread_create(int priority,void *(*function)(void*),void* arg,void *stack)
+{
+  int i;
+  int pid;
+  struct proc *np;
+
+  // Allocate process.
+  if((np = allocproc()) == 0)
+    return -1;
+  if( proc->thread_count == 7 )
+	  return -1;
+
+  np->pgdir = proc->pgdir;
+  np->sz = proc->sz;
+  np->parent = proc;
+  *np->tf = *proc->tf;
+
+  // Clear %eax so that thread returns 0 in the child.
+  np->tf->eax = 0;
+
+  for(i = 0; i < NOFILE; i++)
+    if(proc->ofile[i])
+      np->ofile[i] = filedup(proc->ofile[i]);
+  np->cwd = idup(proc->cwd);
+
+  safestrcpy(np->name, proc->name, sizeof(proc->name));
+ 
+  proc->thread_count++;
+  proc->thread[proc->thread_count] = np;
+  np->thread_num = proc->thread_count;
+  np->nice = priority;
+
+  pid = np->pid;
+
+  void *topStack = stack + 4096; //pointer to top of stack (physically at bottom)
+		
+  //Arg 1
+  *(int*)(topStack - 8) = 0xffffffff; //push fake return PC
+  np->tf->esp =(int)(topStack - 8);  //point SP to fake return PC
+  np->tf->eip =(int)function; //point IP to function
+
+  //Arg 2
+  *(int*)(topStack - 4) =(int)arg; //push user argument of function to stack
+
+  //Arg 3
+  np->stack = stack; //use user's passed in stack address
+
+  // lock to force the compiler to emit the np->state write last.
+  acquire(&ptable.lock);
+  np->state = RUNNABLE;
+  release(&ptable.lock);
+  
+  return pid;
+}
+
+void do_thread_exit(void* retval)
+{
+	int i;
+
+	for( i=0; i<NOFILE ; i++)
+		if(proc->ofile[i])
+			proc->parent->ofile[i] = filedup(proc->ofile[i]);
+	proc->parent->cwd = idup(proc->cwd);
+
+
+  //begin_op();
+  //iput(proc->cwd);
+  //end_op();
+  //proc->cwd = 0;
+
+  acquire(&ptable.lock);
+
+  // Parent might be sleeping in wait().
+  wakeup1(proc->parent);
+
+  proc->retval = retval;
+  proc->parent->thread_count--;
+
+  // Jump into the scheduler, never to return.
+  proc->state = ZOMBIE;
+  sched();
+  panic("zombie exit");
+}
+
+int do_thread_join(int tid,void** retval)
+{
+  struct proc *p;
+  int havekids;
+
+  acquire(&ptable.lock);
+  for(;;){
+    // Scan through table looking for zombie children.
+    havekids = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if( (p->parent != proc) || (p->pgdir != proc->pgdir) )
+        continue;
+      havekids = 1;
+      if(p->pid == tid && p->state == ZOMBIE){
+        // Found one.
+		*retval = p->retval;
+        kfree(p->kstack);
+        p->kstack = 0;
+        p->state = UNUSED;
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+		p->thread_num = 0;
+		p->thread_count = 0;
+        release(&ptable.lock);
+        return 0;
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || proc->killed){
+      release(&ptable.lock);
+      return -1;
+    }
+
+    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
+    sleep(proc, &ptable.lock);  //DOC: wait-sleep
+  }
+}
+
+int do_gettid(void)
+{
+	return proc->pid;
 }

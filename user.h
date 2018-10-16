@@ -28,6 +28,11 @@ void yield(void);
 int getnice(int);
 int setnice(int,int);
 int freemem(void);
+int thread_create(void *(*)(void *), int, void *, void *);
+void thread_exit(void *) __attribute__((noreturn));
+int thread_join(int, void **);
+int gettid(void);
+int getpid(void);
 
 // ulib.c
 int stat(char*, struct stat*);
