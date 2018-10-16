@@ -78,6 +78,30 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
    
+  //Page Fault on User Stack ... need change for generalization
+  case T_PGFLT:
+	proc->killed = 1;
+	exit();
+	/*
+	uint* pte;
+	pte = walkpgdir(proc->pgdir, proc->tf->esp, 0);
+	*pte &= PTE_U;
+	if( pte == 0 ) {
+		proc->killed = 1;
+		exit();
+	}
+	else {
+
+	// allocate one page under the user stack
+	char* mem;
+	mem=kalloc();
+	memset(mem,0,PGSIZE);
+	mappages(proc->pgdir,(char*)(proc->tf->esp-PGSIZE),PGSIZE,v2p(mem),0x001|0x002);
+	proc->tf->esp-=PGSIZE;
+	}
+	*/
+	break;
+
   //PAGEBREAK: 13
   default:
     if(proc == 0 || (tf->cs&3) == 0){
@@ -100,12 +124,10 @@ trap(struct trapframe *tf)
   if(proc && proc->killed && (tf->cs&3) == DPL_USER)
     exit();
 
-  /*
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
   if(proc && proc->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER)
     yield();
-  */
 
   // Check if the process has been killed since we yielded
   if(proc && proc->killed && (tf->cs&3) == DPL_USER)
