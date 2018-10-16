@@ -1,3 +1,18 @@
+# xv6-project
+Operating System Programming Assignment
+
+xv6-project
+
+project2 : implementing priority scheduling
+
+project3 : expanding stack
+
+project4 : implementing copy-on-write
+
+project5 : implementing threads
+
+project6 : implementing mutex & semaphore
+
 xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
 Version 6 (v6).  xv6 loosely follows the structure and style of v6,
 but is implemented for a modern x86-based multiprocessor using ANSI C.
