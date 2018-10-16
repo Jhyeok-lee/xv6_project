@@ -115,9 +115,7 @@ sys_halt(void)
 	return 0;
 }
 
-int
-sys_yield(void)
+int sys_freemem(void)
 {
-	yield();
-	return 0;
+	return freemem();
 }

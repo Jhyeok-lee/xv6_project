@@ -67,6 +67,7 @@ char*           kalloc(void);
 void            kfree(char*);
 void            kinit1(void*, void*);
 void            kinit2(void*, void*);
+int freemem(void);
 
 // kbd.c
 void            kbdintr(void);
@@ -165,6 +166,8 @@ void            uartintr(void);
 void            uartputc(int);
 
 // vm.c
+void			copyonwrite(uint);
+//void			copyonwrite(pde_t*,uint);
 void            seginit(void);
 void            kvmalloc(void);
 void            vmenable(void);

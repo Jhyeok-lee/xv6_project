@@ -27,6 +27,7 @@ int halt(void) __attribute__((noreturn));
 void yield(void);
 int getnice(int);
 int setnice(int,int);
+int freemem(void);
 
 // ulib.c
 int stat(char*, struct stat*);

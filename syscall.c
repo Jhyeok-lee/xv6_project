@@ -102,6 +102,7 @@ extern int sys_halt(void);
 extern int sys_yield(void);
 extern int sys_getnice(void);
 extern int sys_setnice(void);
+extern int sys_freemem(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -129,6 +130,7 @@ static int (*syscalls[])(void) = {
 [SYS_yield]   sys_yield,
 [SYS_getnice] sys_getnice,
 [SYS_setnice] sys_setnice,
+[SYS_freemem] sys_freemem,
 };
 
 void
