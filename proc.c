@@ -6,6 +6,7 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "synch.h"
 
 struct _ptable {
 	struct spinlock lock;
@@ -750,4 +751,133 @@ int do_thread_join(int tid,void** retval)
 int do_gettid(void)
 {
 	return proc->pid;
+}
+
+struct proc *mutex_queue[10];
+
+int do_mutex_lock(struct mutex_t *mutex){
+
+	int i;
+
+	if(mutex == 0)
+		return -1;
+
+	if(mutex->init != 1)
+		return -2;
+
+	if(proc->mutex != 0)
+		return -3;
+
+	mutex->flag--;
+	proc->mutex=1;
+
+	if( mutex->flag < 0 ) {
+		proc->state = SLEEPING;
+		for(i=0;i<10;i++) {
+			if(mutex_queue[i] == 0) {
+				mutex_queue[i] = proc;
+				break;
+			}
+		}
+		acquire(&ptable.lock);
+		sched();
+		release(&ptable.lock);
+	}
+
+	return 0;
+}
+
+int do_mutex_unlock(struct mutex_t *mutex){
+
+	int i;
+	int top=40;
+
+	if(mutex == 0)
+		return -1;
+
+	if(mutex->init != 1)
+		return -2;
+
+	if(proc->mutex == 0)
+		return -3;
+
+	mutex->flag++;
+	proc->mutex=0;
+
+	for(i=0;i<10;i++) {
+		if(mutex_queue[i] != 0 && top >= mutex_queue[i]->nice)
+			top = mutex_queue[i]->nice;
+	}
+
+	for(i=0;i<10;i++) {
+		if(mutex_queue[i] != 0 && mutex_queue[i]->nice == top) {
+			mutex_queue[i]->state = RUNNABLE;
+			mutex_queue[i] = 0;
+			break;
+		}
+	}
+
+	return 0;
+}
+
+struct proc* cond_queue[10];
+
+int do_cond_wait(struct cond_t *cond, struct mutex_t *mutex){
+
+	int i;
+
+	if(cond == 0 || mutex == 0)
+		return -1;
+
+	if(cond->init != 1)
+		return -2;
+
+	if(proc->mutex != 1)
+		return -3;
+
+	do_mutex_unlock(mutex);
+
+	proc->state = SLEEPING;
+
+	for(i=0;i<10;i++) {
+		if(cond_queue[i] == 0) {
+			cond_queue[i] = proc;
+			break;
+		}
+	}
+
+	acquire(&ptable.lock);
+	sched();
+	release(&ptable.lock);
+
+	do_mutex_lock(mutex);
+
+	return 0;
+}
+
+int do_cond_signal(struct cond_t *cond){
+
+	int i;
+	int top=40;
+
+	if(cond == 0)
+		return -1;
+
+	if(cond->init != 1)
+		return -2;
+
+	for(i=0;i<10;i++) {
+		if( cond_queue[i] != 0 && top >= cond_queue[i]->nice )
+			top = cond_queue[i]->nice;
+	}
+
+	for(i=0;i<10;i++) {
+		if( cond_queue[i] != 0 && cond_queue[i]->nice == top ) {
+			cond_queue[i]->state = RUNNABLE;
+			cond_queue[i] = 0;
+			break;
+		}
+	}
+
+	return 0;
 }

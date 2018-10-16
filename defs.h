@@ -8,6 +8,8 @@ struct rtcdate;
 struct spinlock;
 struct stat;
 struct superblock;
+struct mutex_t;
+struct cond_t;
 
 // bio.c
 void            binit(void);
@@ -126,12 +128,24 @@ int				do_thread_create(int,void*(*)(void*),void*, void *);
 void			do_thread_exit(void*);
 int				do_thread_join(int, void**);
 int				do_gettid(void);
+int				do_mutex_lock(struct mutex_t *);
+int				do_mutex_unlock(struct mutex_t *);
+int				do_cond_wait(struct cond_t *, struct mutex_t *);
+int				do_cond_signal(struct cond_t *);
 
 // thread.c
 int 			thread_create(void *(*)(void *), int, void *, void *);
 void 			thread_exit(void *);
 int 			thread_join(int, void **);
 int 			gettid(void);
+
+// synch.c
+int 			mutex_init(struct mutex_t *);
+int 			mutex_lock(struct mutex_t *);
+int 			mutex_unlock(struct mutex_t *);
+int 			cond_init(struct cond_t *);
+int 			cond_wait(struct cond_t *, struct mutex_t *);
+int 			cond_signal(struct cond_t *);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

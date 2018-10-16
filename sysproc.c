@@ -5,7 +5,9 @@
 #include "param.h"
 #include "memlayout.h"
 #include "mmu.h"
+#include "spinlock.h"
 #include "proc.h"
+#include "synch.h"
 
 int
 sys_fork(void)
@@ -101,7 +103,7 @@ int
 sys_uptime(void)
 {
   uint xticks;
-  
+
   acquire(&tickslock);
   xticks = ticks;
   release(&tickslock);
@@ -145,4 +147,58 @@ int sys_thread_join(void){
 
 int sys_gettid(void){
 	return gettid();
+}
+
+int sys_mutex_init(void){
+	int mutex;
+
+	if(argint(0, &mutex)<0)
+		return -1;
+
+	return mutex_init((struct mutex_t *)mutex);
+}
+
+int sys_mutex_lock(void){
+	int mutex;
+
+	if(argint(0, &mutex)<0)
+		return -1;
+
+	return mutex_lock((struct mutex_t *)mutex);
+}
+
+int sys_mutex_unlock(void){
+	int mutex;
+
+	if(argint(0, &mutex)<0)
+		return -1;
+
+	return mutex_unlock((struct mutex_t *)mutex);
+}
+
+int sys_cond_init(void){
+	int cond;
+
+	if(argint(0, &cond)<0)
+		return -1;
+
+	return cond_init((struct cond_t *)cond);
+}
+
+int sys_cond_wait(void){
+	int cond, mutex;
+
+	if(argint(0, &cond)<0 || argint(1, &mutex)<0)
+		return -1;
+
+	return cond_wait((struct cond_t *)cond, (struct mutex_t *)mutex);
+}
+
+int sys_cond_signal(void){
+	int cond;
+
+	if(argint(0, &cond)<0)
+		return -1;
+
+	return cond_signal((struct cond_t *)cond);
 }

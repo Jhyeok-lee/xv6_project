@@ -74,6 +74,8 @@ struct proc {
   struct proc* thread[8];
   void* retval;
   void* stack;
+  int mutex;
+  int cond;
 };
 
 // Process memory is laid out contiguously, low addresses first:
